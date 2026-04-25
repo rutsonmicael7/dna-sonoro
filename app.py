@@ -1,23 +1,60 @@
 import streamlit as st
 import pandas as pd
-# Aqui depois vamos colocar a lógica da API do Spotify
-# Por enquanto, é a estrutura da nossa interface
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import NearestNeighbors
 
+# Configuração da página
 st.set_page_config(page_title="DNA Sonoro", page_icon="🎵")
 
 st.title("🎵 DNA Sonoro: Recomendação por Vibe")
-st.markdown("Chega de recomendações genéricas. Digite uma música e vamos achar o 'esqueleto' acústico dela.")
+st.markdown("Chega de recomendações por marketing. Digite uma música e vamos achar o 'esqueleto' acústico dela.")
 
-song_name = st.text_input("Qual música você tem na cabeça agora?", placeholder="Ex: My Dear - Chen")
+# Base de Dados Exemplo (DNA das Músicas)
+# Em um projeto maior, carregaríamos um CSV com 100k músicas aqui.
+@st.cache_data
+def load_data():
+    data = {
+        'name': ['My Dear', 'Love Shot', 'Dynamite', 'Blue Hour', 'Growl', 'Seven', 'Ditto', 'Perfect Night'],
+        'artist': ['Chen', 'EXO', 'BTS', 'TXT', 'EXO', 'Jungkook', 'NewJeans', 'LE SSERAFIM'],
+        # DNA: [Danceability, Energy, Acousticness, Valence]
+        'danceability': [0.4, 0.8, 0.7, 0.6, 0.7, 0.7, 0.6, 0.6],
+        'energy': [0.3, 0.9, 0.8, 0.7, 0.8, 0.8, 0.5, 0.7],
+        'acousticness': [0.8, 0.1, 0.0, 0.1, 0.1, 0.1, 0.7, 0.2],
+        'valence': [0.3, 0.7, 0.9, 0.6, 0.7, 0.8, 0.4, 0.5]
+    }
+    return pd.DataFrame(data)
 
-if song_name:
-    st.write(f"Analisando a estrutura de '{song_name}'...")
-    # Aqui o código vai buscar os Audio Features e comparar
-    st.info("Buscando B-sides e raridades com a mesma pegada acústica...")
+df = load_data()
+
+# Preparação dos dados para a IA
+features = ['danceability', 'energy', 'acousticness', 'valence']
+scaler = StandardScaler()
+df_scaled = scaler.fit_transform(df[features])
+
+# Treinando o modelo de vizinhos mais próximos
+model = NearestNeighbors(n_neighbors=3, metric='euclidean')
+model.fit(df_scaled)
+
+# Interface de Busca
+target_song = st.text_input("Qual música você tem na cabeça agora?", placeholder="Ex: My Dear - Chen")
+
+if target_song:
+    # Busca simples pelo nome
+    match = df[df['name'].str.contains(target_song.split(' - ')[0], case=False, na=False)]
     
-    # Exemplo de como os resultados vão aparecer
-    col1, col2 = st.columns(2)
-    with col1:
-        st.success("Recomendação 1: Focada em Timbre")
-    with col2:
-        st.success("Recomendação 2: Focada em Melancolia")
+    if not match.empty:
+        idx = match.index[0]
+        st.write(f"🧬 **DNA Identificado:** {df.iloc[idx]['name']} ({df.iloc[idx]['artist']})")
+        
+        # Encontrando similares
+        distances, indices = model.kneighbors([df_scaled[idx]])
+        
+        st.subheader("Sugestões com DNA próximo:")
+        for i in indices[0]:
+            if i != idx:
+                st.write(f"✨ **{df.iloc[i]['name']}** — {df.iloc[i]['artist']}")
+                st.caption(f"Vibe similar em {(1 - distances[0][1])*100:.1f}%")
+    else:
+        st.error("Ainda não tenho essa música no meu banco de dados. Tente uma das sugestões acima!")
+
+st.info("💡 Este é o motor inicial. No próximo passo, vamos conectar uma base de dados com 1 milhão de músicas.")
